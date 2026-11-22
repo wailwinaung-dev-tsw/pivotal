@@ -2,4 +2,6 @@
 // Copyright 2024-2026 ThitsaWorks Pte. Ltd.
 export * from './nats-client.service';
 export * from './nats-client-service.module';
+export * from './nats-client.module-definition';
+export * from './nats.schema';
 export * from './stream-provisioner';
