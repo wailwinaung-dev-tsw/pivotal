@@ -2,8 +2,9 @@
 // Copyright 2024-2026 ThitsaWorks Pte. Ltd.
 import { Inject } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { TransactionMessage } from '@shared/messaging';
-import { FSPIOP_RESPONSE_PORT, FspiopResponsePort, TRANSACTION_AUDIT_PORT, TransactionAuditPort } from '../../port';
+import { FspiopPubSubSubjects } from '@shared/fspiop';
+import { AuditMessagingSubjects, TransactionMessage } from '@shared/messaging';
+import { MESSAGE_BUS_PORT, MessageBusPort } from '../../port';
 import { HandlePutQuotesCommand } from './handle-put-quotes.command';
 import { resolveGatewayCorrelationId } from '../gateway-audit';
 
@@ -12,10 +13,8 @@ export class HandlePutQuotesHandler
     implements ICommandHandler<HandlePutQuotesCommand, HandlePutQuotesCommand.Output> {
 
     constructor(
-        @Inject(TRANSACTION_AUDIT_PORT)
-        private readonly auditPort: TransactionAuditPort,
-        @Inject(FSPIOP_RESPONSE_PORT)
-        private readonly responsePort: FspiopResponsePort,
+        @Inject(MESSAGE_BUS_PORT)
+        private readonly bus: MessageBusPort,
     ) {
     }
 
@@ -29,7 +28,8 @@ export class HandlePutQuotesHandler
         const auditCorrelationId = resolveGatewayCorrelationId(correlationId, quoteId);
         const createdAt = new Date();
 
-        await this.auditPort.publish(
+        await this.bus.publish(
+            AuditMessagingSubjects.transaction,
             TransactionMessage.response(
                 TransactionMessage.InvocationPhase.Quotes,
                 TransactionMessage.InvocationGateway.Inbound,
@@ -43,13 +43,10 @@ export class HandlePutQuotesHandler
             ),
         );
 
-        await this.responsePort.publishQuotesSuccess({
-            payerFsp,
-            quoteId,
-            payload: {
-                response,
-                iso20022QuoteResponse,
-            },
+        const subject = FspiopPubSubSubjects.Quotes.forSuccess(payerFsp, quoteId);
+        await this.bus.publish(subject, {
+            response,
+            iso20022QuoteResponse,
         });
 
         return new HandlePutQuotesCommand.Output();

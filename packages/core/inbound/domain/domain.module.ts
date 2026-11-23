@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2024-2026 ThitsaWorks Pte. Ltd.
-import {DynamicModule, Module} from '@nestjs/common';
-import {CqrsModule} from '@nestjs/cqrs';
+import { DynamicModule, Module } from '@nestjs/common';
+import { CqrsModule } from '@nestjs/cqrs';
+import { ConfigurableModuleClass } from './domain.module-definition';
 import {
     HandleGetPartiesHandler,
     HandlePatchTransfersHandler,
@@ -35,29 +36,20 @@ const CommandHandlers = [
     providers: [...CommandHandlers],
     exports: [CqrsModule, ...CommandHandlers],
 })
-export class InboundDomainModule {
+export class InboundDomainModule extends ConfigurableModuleClass {
 
     /**
-     * @deprecated InboundDomainModule no longer requires infrastructure settings.
-     * Kept for backwards compatibility during migration.
+     * @deprecated Kept for temporary backward compatibility with WebInboundModule during migration.
+     * Use InboundDomainModule.register({ ports: ... }) or registerAsync({ ports: ... }) instead.
      */
-    static forRootAsync(asyncOptions?: InboundDomainModule.AsyncOptions): DynamicModule {
-        return {
-            module: InboundDomainModule,
-            imports: [
-                CqrsModule,
-                ...(asyncOptions?.imports ?? []),
-            ],
-            providers: [...CommandHandlers],
-            exports: [CqrsModule, ...CommandHandlers],
-        };
+    static forRootAsync(asyncOptions?: any): DynamicModule {
+        return InboundDomainModule.registerAsync(asyncOptions ?? { useFactory: () => ({}) });
     }
 }
 
 export namespace InboundDomainModule {
 
-    export interface RequiredSettings {
-    }
+    export interface RequiredSettings {}
 
     export type AsyncOptions = {
         imports?: any[];

@@ -2,8 +2,13 @@
 // Copyright 2024-2026 ThitsaWorks Pte. Ltd.
 import { Inject } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { QuoteRequestMessage, TransactionMessage } from '@shared/messaging';
-import { QUOTE_REQUEST_PORT, QuoteRequestPort, TRANSACTION_AUDIT_PORT, TransactionAuditPort } from '../../port';
+import {
+    AuditMessagingSubjects,
+    FspiopMessagingSubjects,
+    QuoteRequestMessage,
+    TransactionMessage,
+} from '@shared/messaging';
+import { MESSAGE_BUS_PORT, MessageBusPort } from '../../port';
 import { HandlePostQuotesCommand } from './handle-post-quotes.command';
 import { resolveGatewayCorrelationId } from '../gateway-audit';
 
@@ -12,10 +17,8 @@ export class HandlePostQuotesHandler
     implements ICommandHandler<HandlePostQuotesCommand, HandlePostQuotesCommand.Output> {
 
     constructor(
-        @Inject(TRANSACTION_AUDIT_PORT)
-        private readonly auditPort: TransactionAuditPort,
-        @Inject(QUOTE_REQUEST_PORT)
-        private readonly quotePort: QuoteRequestPort,
+        @Inject(MESSAGE_BUS_PORT)
+        private readonly bus: MessageBusPort,
     ) {}
 
     async execute(command: HandlePostQuotesCommand): Promise<HandlePostQuotesCommand.Output> {
@@ -29,7 +32,8 @@ export class HandlePostQuotesHandler
         const connectorCorrelationId = correlationId?.trim() || auditCorrelationId;
         const createdAt = new Date();
 
-        await this.auditPort.publish(
+        await this.bus.publish(
+            AuditMessagingSubjects.transaction,
             TransactionMessage.request(
                 TransactionMessage.InvocationPhase.Quotes,
                 TransactionMessage.InvocationGateway.Inbound,
@@ -43,7 +47,8 @@ export class HandlePostQuotesHandler
             ),
         );
 
-        await this.quotePort.publish(
+        await this.bus.publish(
+            FspiopMessagingSubjects.postQuotes(payeeFsp),
             new QuoteRequestMessage(
                 connectorCorrelationId,
                 payerFsp,

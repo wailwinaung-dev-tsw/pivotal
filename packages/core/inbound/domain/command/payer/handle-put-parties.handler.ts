@@ -2,7 +2,8 @@
 // Copyright 2024-2026 ThitsaWorks Pte. Ltd.
 import { Inject } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { FSPIOP_RESPONSE_PORT, FspiopResponsePort } from '../../port';
+import { FspiopPubSubSubjects } from '@shared/fspiop';
+import { MESSAGE_BUS_PORT, MessageBusPort } from '../../port';
 import { HandlePutPartiesCommand } from './handle-put-parties.command';
 
 @CommandHandler(HandlePutPartiesCommand)
@@ -10,8 +11,8 @@ export class HandlePutPartiesHandler
     implements ICommandHandler<HandlePutPartiesCommand, HandlePutPartiesCommand.Output> {
 
     constructor(
-        @Inject(FSPIOP_RESPONSE_PORT)
-        private readonly responsePort: FspiopResponsePort,
+        @Inject(MESSAGE_BUS_PORT)
+        private readonly bus: MessageBusPort,
     ) {
     }
 
@@ -22,14 +23,15 @@ export class HandlePutPartiesHandler
             return new HandlePutPartiesCommand.Output();
         }
 
-        await this.responsePort.publishPartiesSuccess({
+        const subject = FspiopPubSubSubjects.Parties.forSuccess(
             payerFsp,
             payeeFsp,
             partyIdType,
             partyId,
-            subId,
-            response,
-        });
+            subId ?? undefined,
+        );
+
+        await this.bus.publish(subject, response);
 
         return new HandlePutPartiesCommand.Output();
     }

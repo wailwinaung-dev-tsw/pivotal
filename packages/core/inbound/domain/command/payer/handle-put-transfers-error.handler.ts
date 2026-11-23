@@ -2,8 +2,9 @@
 // Copyright 2024-2026 ThitsaWorks Pte. Ltd.
 import { Inject } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { TransactionMessage } from '@shared/messaging';
-import { FSPIOP_RESPONSE_PORT, FspiopResponsePort, TRANSACTION_AUDIT_PORT, TransactionAuditPort } from '../../port';
+import { FspiopPubSubSubjects } from '@shared/fspiop';
+import { AuditMessagingSubjects, TransactionMessage } from '@shared/messaging';
+import { MESSAGE_BUS_PORT, MessageBusPort } from '../../port';
 import { HandlePutTransfersErrorCommand } from './handle-put-transfers-error.command';
 import { resolveGatewayCorrelationId } from '../gateway-audit';
 
@@ -13,10 +14,8 @@ export class HandlePutTransfersErrorHandler
 {
 
     constructor(
-        @Inject(TRANSACTION_AUDIT_PORT)
-        private readonly auditPort: TransactionAuditPort,
-        @Inject(FSPIOP_RESPONSE_PORT)
-        private readonly responsePort: FspiopResponsePort,
+        @Inject(MESSAGE_BUS_PORT)
+        private readonly bus: MessageBusPort,
     ) {
     }
 
@@ -30,7 +29,8 @@ export class HandlePutTransfersErrorHandler
         const auditCorrelationId = resolveGatewayCorrelationId(correlationId, transferId);
         const createdAt = new Date();
 
-        await this.auditPort.publish(
+        await this.bus.publish(
+            AuditMessagingSubjects.transaction,
             TransactionMessage.error(
                 TransactionMessage.InvocationPhase.Transfers,
                 TransactionMessage.InvocationGateway.Inbound,
@@ -44,11 +44,8 @@ export class HandlePutTransfersErrorHandler
             ),
         );
 
-        await this.responsePort.publishTransfersError({
-            payerFsp,
-            transferId,
-            error,
-        });
+        const subject = FspiopPubSubSubjects.Transfers.forError(payerFsp, transferId);
+        await this.bus.publish(subject, error);
 
         return new HandlePutTransfersErrorCommand.Output();
     }
