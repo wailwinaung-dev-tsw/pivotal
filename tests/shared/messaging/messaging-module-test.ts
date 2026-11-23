@@ -4,11 +4,17 @@ import * as assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { Inject, Injectable } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { PartyIdType } from '@shared/fspiop';
 import {
     IMessageBus,
     MESSAGE_BUS,
     MessagingModule,
     messagingOptionsSchema,
+    FspiopMessagingSubjects,
+    PartyLookupMessage,
+    QuoteRequestMessage,
+    TransferRequestMessage,
+    TransferPatchMessage,
 } from '../../../packages/shared/messaging';
 
 @Injectable()
@@ -97,6 +103,127 @@ describe('MessagingModule (ConfigurableModuleBuilder + Zod with Nats Provider)',
             assert.ok(consumer.bus != null);
             assert.equal(typeof consumer.bus.publish, 'function');
             assert.equal(typeof consumer.bus.subscribe, 'function');
+        });
+    });
+
+    describe('FspiopMessagingSubjects', () => {
+        it('generates correct subject for partyLookup', () => {
+            assert.equal(FspiopMessagingSubjects.partyLookup('bluebank'), 'fspiop.bluebank.get.parties');
+        });
+
+        it('generates correct subject for postQuotes', () => {
+            assert.equal(FspiopMessagingSubjects.postQuotes('bluebank'), 'fspiop.bluebank.post.quotes');
+        });
+
+        it('generates correct subject for postTransfers', () => {
+            assert.equal(FspiopMessagingSubjects.postTransfers('bluebank'), 'fspiop.bluebank.post.transfers');
+        });
+
+        it('generates correct subject for patchTransfers', () => {
+            assert.equal(FspiopMessagingSubjects.patchTransfers('bluebank'), 'fspiop.bluebank.patch.transfers');
+        });
+    });
+
+    describe('Messaging Contracts', () => {
+        it('creates PartyLookupMessage with all fields', () => {
+            const msg = new PartyLookupMessage('corr-1', 'payer', 'payee', PartyIdType.Msisdn, '123456', 'sub-1');
+            assert.equal(msg.correlationId, 'corr-1');
+            assert.equal(msg.payerFsp, 'payer');
+            assert.equal(msg.payeeFsp, 'payee');
+            assert.equal(msg.partyIdType, PartyIdType.Msisdn);
+            assert.equal(msg.partyId, '123456');
+            assert.equal(msg.subId, 'sub-1');
+        });
+
+        it('creates QuoteRequestMessage with all fields', () => {
+            const quoteReq = { quoteId: 'q-1', transactionId: 't-1' } as any;
+            const msg = new QuoteRequestMessage('corr-2', 'payer', 'payee', quoteReq);
+            assert.equal(msg.correlationId, 'corr-2');
+            assert.equal(msg.payerFsp, 'payer');
+            assert.equal(msg.payeeFsp, 'payee');
+            assert.equal(msg.request, quoteReq);
+            assert.equal(msg.iso20022PostQuoteRequest, undefined);
+        });
+
+        it('creates TransferRequestMessage with all fields', () => {
+            const transferReq = { transferId: 'tr-1' } as any;
+            const msg = new TransferRequestMessage('corr-3', 'payer', 'payee', transferReq);
+            assert.equal(msg.correlationId, 'corr-3');
+            assert.equal(msg.payerFsp, 'payer');
+            assert.equal(msg.payeeFsp, 'payee');
+            assert.equal(msg.request, transferReq);
+        });
+
+        it('creates TransferPatchMessage with all fields', () => {
+            const patchRes = { completedTimestamp: '2026-01-01T00:00:00.000Z', transferState: 'COMMITTED' } as any;
+            const msg = new TransferPatchMessage('corr-4', 'payer', 'payee', 'tr-1', patchRes);
+            assert.equal(msg.correlationId, 'corr-4');
+            assert.equal(msg.payerFsp, 'payer');
+            assert.equal(msg.payeeFsp, 'payee');
+            assert.equal(msg.transferId, 'tr-1');
+            assert.equal(msg.response, patchRes);
+        });
+    });
+
+    describe('NatsMessageBusService Stream Auto-Provisioning', () => {
+        it('provisions fspiop stream on first publish and caches resolution', async () => {
+            const moduleRef = await Test.createTestingModule({
+                imports: [
+                    MessagingModule.register({
+                        url: 'nats://test-stream:4222',
+                    }),
+                ],
+            }).compile();
+
+            const bus = moduleRef.get<any>(MESSAGE_BUS);
+
+            let findCalls = 0;
+            let addCalls = 0;
+            let publishCalls = 0;
+
+            const fakeJsm = {
+                streams: {
+                    find: async (sub: string) => {
+                        findCalls++;
+                        throw new Error('no stream matches subject');
+                    },
+                    add: async (cfg: any) => {
+                        addCalls++;
+                        assert.equal(cfg.name, 'PIVOTAL_FSPIOP');
+                        assert.deepEqual(cfg.subjects, ['fspiop.>']);
+                    },
+                },
+            };
+
+            const fakeJs = {
+                jetstreamManager: async () => fakeJsm,
+                publish: async (subject: string, data: any) => {
+                    publishCalls++;
+                },
+            };
+
+            // Stub connection & jetstream
+            bus.connection = {
+                jetstream: () => fakeJs,
+            };
+
+            // First publish - should detect fspiop., trigger find, add, and publish
+            await bus.publish('fspiop.bluebank.post.quotes', { test: true });
+            assert.equal(findCalls, 1);
+            assert.equal(addCalls, 1);
+            assert.equal(publishCalls, 1);
+
+            // Second publish - cached, should not call find or add again
+            await bus.publish('fspiop.bluebank.post.transfers', { test: true });
+            assert.equal(findCalls, 1);
+            assert.equal(addCalls, 1);
+            assert.equal(publishCalls, 2);
+
+            // Non-fspiop publish - should not trigger fspiop stream logic
+            await bus.publish('other.subject', { test: true });
+            assert.equal(findCalls, 1);
+            assert.equal(addCalls, 1);
+            assert.equal(publishCalls, 3);
         });
     });
 });
