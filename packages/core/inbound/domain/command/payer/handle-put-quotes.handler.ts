@@ -1,23 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2024-2026 ThitsaWorks Pte. Ltd.
-import {Inject} from '@nestjs/common';
-import {CommandHandler, ICommandHandler} from '@nestjs/cqrs';
-import {TransactionMessage} from '@core/audit/common';
-import {AuditTransactionPublisher} from '@core/audit/producer';
-import {FspiopPubSubSubjects, FspiopResponsePublisher} from '@shared/fspiop';
-import type {QuoteSuccessPayload} from '@shared/fspiop';
-import {HandlePutQuotesCommand} from './handle-put-quotes.command';
-import {resolveGatewayCorrelationId} from '../gateway-audit';
+import { Inject } from '@nestjs/common';
+import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
+import { TransactionMessage } from '@shared/messaging';
+import { FSPIOP_RESPONSE_PORT, FspiopResponsePort, TRANSACTION_AUDIT_PORT, TransactionAuditPort } from '../../port';
+import { HandlePutQuotesCommand } from './handle-put-quotes.command';
+import { resolveGatewayCorrelationId } from '../gateway-audit';
 
 @CommandHandler(HandlePutQuotesCommand)
 export class HandlePutQuotesHandler
     implements ICommandHandler<HandlePutQuotesCommand, HandlePutQuotesCommand.Output> {
 
     constructor(
-        @Inject(AuditTransactionPublisher)
-        private readonly auditPublisher: AuditTransactionPublisher,
-        @Inject(FspiopResponsePublisher)
-        private readonly publisher: FspiopResponsePublisher,
+        @Inject(TRANSACTION_AUDIT_PORT)
+        private readonly auditPort: TransactionAuditPort,
+        @Inject(FSPIOP_RESPONSE_PORT)
+        private readonly responsePort: FspiopResponsePort,
     ) {
     }
 
@@ -31,7 +29,7 @@ export class HandlePutQuotesHandler
         const auditCorrelationId = resolveGatewayCorrelationId(correlationId, quoteId);
         const createdAt = new Date();
 
-        await this.auditPublisher.publish(
+        await this.auditPort.publish(
             TransactionMessage.response(
                 TransactionMessage.InvocationPhase.Quotes,
                 TransactionMessage.InvocationGateway.Inbound,
@@ -45,14 +43,13 @@ export class HandlePutQuotesHandler
             ),
         );
 
-        const subject = FspiopPubSubSubjects.Quotes.forSuccess(
+        await this.responsePort.publishQuotesSuccess({
             payerFsp,
             quoteId,
-        );
-
-        await this.publisher.publishSuccess<QuoteSuccessPayload>(subject, {
-            response,
-            iso20022QuoteResponse,
+            payload: {
+                response,
+                iso20022QuoteResponse,
+            },
         });
 
         return new HandlePutQuotesCommand.Output();

@@ -15,6 +15,7 @@ import {
     QuoteRequestMessage,
     TransferRequestMessage,
     TransferPatchMessage,
+    TransactionMessage,
 } from '../../../packages/shared/messaging';
 
 @Injectable()
@@ -162,6 +163,32 @@ describe('MessagingModule (ConfigurableModuleBuilder + Zod with Nats Provider)',
             assert.equal(msg.payeeFsp, 'payee');
             assert.equal(msg.transferId, 'tr-1');
             assert.equal(msg.response, patchRes);
+        });
+
+        it('creates TransactionMessage request/response/error/resolved factory methods', () => {
+            const req = TransactionMessage.request(
+                TransactionMessage.InvocationPhase.Quotes,
+                TransactionMessage.InvocationGateway.Inbound,
+                { correlationId: 'c-1', payerFsp: 'payer', payeeFsp: 'payee' },
+            );
+            assert.equal(req.phase, TransactionMessage.InvocationPhase.Quotes);
+            assert.equal(req.action, TransactionMessage.InvocationAction.Request);
+            assert.equal(req.gateway, TransactionMessage.InvocationGateway.Inbound);
+            assert.equal((req.content as any).correlationId, 'c-1');
+
+            const res = TransactionMessage.response(
+                TransactionMessage.InvocationPhase.Transfers,
+                TransactionMessage.InvocationGateway.Outbound,
+                { correlationId: 'c-2', payerFsp: 'payer', payeeFsp: 'payee' },
+            );
+            assert.equal(res.action, TransactionMessage.InvocationAction.Response);
+
+            const err = TransactionMessage.error(
+                TransactionMessage.InvocationPhase.Quotes,
+                TransactionMessage.InvocationGateway.Connector,
+                { correlationId: 'c-3', payerFsp: 'payer', payeeFsp: 'payee', error: 'failed' },
+            );
+            assert.equal(err.action, TransactionMessage.InvocationAction.Error);
         });
     });
 

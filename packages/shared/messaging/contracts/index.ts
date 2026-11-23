@@ -4,3 +4,4 @@ export * from './party-lookup.message';
 export * from './quote-request.message';
 export * from './transfer-request.message';
 export * from './transfer-patch.message';
+export * from './transaction.message';

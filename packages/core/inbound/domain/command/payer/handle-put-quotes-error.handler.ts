@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2024-2026 ThitsaWorks Pte. Ltd.
-import {Inject} from '@nestjs/common';
-import {CommandHandler, ICommandHandler} from '@nestjs/cqrs';
-import {TransactionMessage} from '@core/audit/common';
-import {AuditTransactionPublisher} from '@core/audit/producer';
-import {FspiopPubSubSubjects, FspiopResponsePublisher} from '@shared/fspiop';
-import {HandlePutQuotesErrorCommand} from './handle-put-quotes-error.command';
-import {resolveGatewayCorrelationId} from '../gateway-audit';
+import { Inject } from '@nestjs/common';
+import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
+import { TransactionMessage } from '@shared/messaging';
+import { FSPIOP_RESPONSE_PORT, FspiopResponsePort, TRANSACTION_AUDIT_PORT, TransactionAuditPort } from '../../port';
+import { HandlePutQuotesErrorCommand } from './handle-put-quotes-error.command';
+import { resolveGatewayCorrelationId } from '../gateway-audit';
 
 @CommandHandler(HandlePutQuotesErrorCommand)
 export class HandlePutQuotesErrorHandler
@@ -14,10 +13,10 @@ export class HandlePutQuotesErrorHandler
 {
 
     constructor(
-        @Inject(AuditTransactionPublisher)
-        private readonly auditPublisher: AuditTransactionPublisher,
-        @Inject(FspiopResponsePublisher)
-        private readonly publisher: FspiopResponsePublisher,
+        @Inject(TRANSACTION_AUDIT_PORT)
+        private readonly auditPort: TransactionAuditPort,
+        @Inject(FSPIOP_RESPONSE_PORT)
+        private readonly responsePort: FspiopResponsePort,
     ) {
     }
 
@@ -31,7 +30,7 @@ export class HandlePutQuotesErrorHandler
         const auditCorrelationId = resolveGatewayCorrelationId(correlationId, quoteId);
         const createdAt = new Date();
 
-        await this.auditPublisher.publish(
+        await this.auditPort.publish(
             TransactionMessage.error(
                 TransactionMessage.InvocationPhase.Quotes,
                 TransactionMessage.InvocationGateway.Inbound,
@@ -45,12 +44,11 @@ export class HandlePutQuotesErrorHandler
             ),
         );
 
-        const subject = FspiopPubSubSubjects.Quotes.forError(
+        await this.responsePort.publishQuotesError({
             payerFsp,
             quoteId,
-        );
-
-        await this.publisher.publishError(subject, error);
+            error,
+        });
 
         return new HandlePutQuotesErrorCommand.Output();
     }
