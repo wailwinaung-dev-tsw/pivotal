@@ -123,6 +123,39 @@ describe('MessagingModule (ConfigurableModuleBuilder + Zod with Nats Provider)',
         it('generates correct subject for patchTransfers', () => {
             assert.equal(FspiopMessagingSubjects.patchTransfers('bluebank'), 'fspiop.bluebank.patch.transfers');
         });
+
+        it('generates correct subjects for Parties responses', () => {
+            assert.equal(
+                FspiopMessagingSubjects.Parties.forSuccess('payer', 'payee', PartyIdType.Msisdn, '123'),
+                'pivotal.fspiop.response.parties:payer:payee:MSISDN:123',
+            );
+            assert.equal(
+                FspiopMessagingSubjects.Parties.forError('payer', 'payee', PartyIdType.Msisdn, '123'),
+                'pivotal.fspiop.response.parties-error:payer:payee:MSISDN:123',
+            );
+        });
+
+        it('generates correct subjects for Quotes responses', () => {
+            assert.equal(
+                FspiopMessagingSubjects.Quotes.forSuccess('payer', 'quote-1'),
+                'pivotal.fspiop.response.quotes:payer:quote-1',
+            );
+            assert.equal(
+                FspiopMessagingSubjects.Quotes.forError('payer', 'quote-1'),
+                'pivotal.fspiop.response.quotes-error:payer:quote-1',
+            );
+        });
+
+        it('generates correct subjects for Transfers responses', () => {
+            assert.equal(
+                FspiopMessagingSubjects.Transfers.forSuccess('payer', 'transfer-1'),
+                'pivotal.fspiop.response.transfers:payer:transfer-1',
+            );
+            assert.equal(
+                FspiopMessagingSubjects.Transfers.forError('payer', 'transfer-1'),
+                'pivotal.fspiop.response.transfers-error:payer:transfer-1',
+            );
+        });
     });
 
     describe('Messaging Contracts', () => {
@@ -204,12 +237,17 @@ describe('MessagingModule (ConfigurableModuleBuilder + Zod with Nats Provider)',
 
             const bus = moduleRef.get<any>(MESSAGE_BUS);
 
+            let infoCalls = 0;
             let findCalls = 0;
             let addCalls = 0;
             let publishCalls = 0;
 
             const fakeJsm = {
                 streams: {
+                    info: async (name: string) => {
+                        infoCalls++;
+                        throw new Error('stream not found');
+                    },
                     find: async (sub: string) => {
                         findCalls++;
                         throw new Error('no stream matches subject');
@@ -234,20 +272,23 @@ describe('MessagingModule (ConfigurableModuleBuilder + Zod with Nats Provider)',
                 jetstream: () => fakeJs,
             };
 
-            // First publish - should detect fspiop., trigger find, add, and publish
+            // First publish - should detect fspiop., trigger info, find, add, and publish
             await bus.publish('fspiop.bluebank.post.quotes', { test: true });
+            assert.equal(infoCalls, 1);
             assert.equal(findCalls, 1);
             assert.equal(addCalls, 1);
             assert.equal(publishCalls, 1);
 
-            // Second publish - cached, should not call find or add again
+            // Second publish - cached, should not call info, find or add again
             await bus.publish('fspiop.bluebank.post.transfers', { test: true });
+            assert.equal(infoCalls, 1);
             assert.equal(findCalls, 1);
             assert.equal(addCalls, 1);
             assert.equal(publishCalls, 2);
 
             // Non-fspiop publish - should not trigger fspiop stream logic
             await bus.publish('other.subject', { test: true });
+            assert.equal(infoCalls, 1);
             assert.equal(findCalls, 1);
             assert.equal(addCalls, 1);
             assert.equal(publishCalls, 3);

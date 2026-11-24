@@ -2,8 +2,7 @@
 // Copyright 2024-2026 ThitsaWorks Pte. Ltd.
 import { Inject } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { FspiopPubSubSubjects } from '@shared/fspiop';
-import { AuditMessagingSubjects, TransactionMessage } from '@shared/messaging';
+import { AuditMessagingSubjects, FspiopMessagingSubjects, TransactionMessage } from '@shared/messaging';
 import { MESSAGE_BUS_PORT, MessageBusPort } from '../../port';
 import { HandlePutTransfersCommand } from './handle-put-transfers.command';
 import { resolveGatewayCorrelationId } from '../gateway-audit';
@@ -44,7 +43,7 @@ export class HandlePutTransfersHandler
             ),
         );
 
-        const subject = FspiopPubSubSubjects.Transfers.forSuccess(payerFsp, transferId);
+        const subject = FspiopMessagingSubjects.Transfers.forSuccess(payerFsp, transferId);
         await this.bus.publish(subject, response);
 
         return new HandlePutTransfersCommand.Output();

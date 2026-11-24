@@ -2,8 +2,7 @@
 // Copyright 2024-2026 ThitsaWorks Pte. Ltd.
 import { Inject } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { FspiopPubSubSubjects } from '@shared/fspiop';
-import { AuditMessagingSubjects, TransactionMessage } from '@shared/messaging';
+import { AuditMessagingSubjects, FspiopMessagingSubjects, TransactionMessage } from '@shared/messaging';
 import { MESSAGE_BUS_PORT, MessageBusPort } from '../../port';
 import { HandlePutQuotesCommand } from './handle-put-quotes.command';
 import { resolveGatewayCorrelationId } from '../gateway-audit';
@@ -43,7 +42,7 @@ export class HandlePutQuotesHandler
             ),
         );
 
-        const subject = FspiopPubSubSubjects.Quotes.forSuccess(payerFsp, quoteId);
+        const subject = FspiopMessagingSubjects.Quotes.forSuccess(payerFsp, quoteId);
         await this.bus.publish(subject, {
             response,
             iso20022QuoteResponse,

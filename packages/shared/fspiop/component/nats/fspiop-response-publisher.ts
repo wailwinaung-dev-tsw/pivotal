@@ -6,6 +6,10 @@ import {NatsClientService} from '@shared/nats';
 import {ErrorInformationObject} from '../../dto';
 import {resolveFspiopResponseStream} from './fspiop-response-stream.resolver';
 
+/**
+ * @deprecated Obsolete: Inbound domain publishes response messages via MessageBusPort and @shared/messaging.
+ * Kept for temporary backward compatibility.
+ */
 export class FspiopResponsePublisher implements OnModuleInit {
 
     private readonly logger = new Logger(FspiopResponsePublisher.name);
