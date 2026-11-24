@@ -9,6 +9,7 @@ import {
     ParticipantRepository,
 } from '@core/participant/domain';
 import {InboundDomainModule} from '@core/inbound/domain';
+import {MESSAGE_BUS, MessagingModule} from '@shared/messaging';
 import {FspInboundGuard, FspiopSettings} from '@shared/fspiop';
 import {PartiesController, QuotesController, TransfersController,} from './controllers';
 import {WebInboundSettings} from './required.settings';
@@ -28,19 +29,32 @@ export class WebInboundModule {
     }
 
     static forRootAsync(asyncOptions: WebInboundModule.AsyncOptions): DynamicModule {
+        const messagingModule = MessagingModule.registerAsync({
+            imports: asyncOptions.imports ?? [],
+            inject: asyncOptions.inject ?? [],
+            useFactory: async (...args: any[]) => {
+                const settings = await asyncOptions.useFactory(...args);
+                return {
+                    url: settings.natsUrl?.() ?? 'nats://localhost:4222',
+                };
+            },
+        });
+
+        const inboundDomainModule = InboundDomainModule.register({
+            imports: [messagingModule],
+            messageBus: { useExisting: MESSAGE_BUS },
+        });
+
         return {
             module: WebInboundModule,
             imports: [
                 ParticipantDomainModule.forRootAsync({
-                                                         imports: asyncOptions.imports ?? [],
-                                                         inject: asyncOptions.inject ?? [],
-                                                         useFactory: asyncOptions.useFactory,
-                                                     }),
-                InboundDomainModule.forRootAsync({
-                                                     imports: asyncOptions.imports ?? [],
-                                                     inject: asyncOptions.inject ?? [],
-                                                     useFactory: asyncOptions.useFactory,
-                                                 }),
+                    imports: asyncOptions.imports ?? [],
+                    inject: asyncOptions.inject ?? [],
+                    useFactory: asyncOptions.useFactory,
+                }),
+                messagingModule,
+                inboundDomainModule,
                 ...(asyncOptions.imports ?? []),
             ],
             controllers: [
@@ -96,8 +110,8 @@ export class WebInboundModule {
 export namespace WebInboundModule {
 
     export interface RequiredSettings
-        extends InboundDomainModule.RequiredSettings,
-            ParticipantDomainModule.RequiredSettings {
+        extends ParticipantDomainModule.RequiredSettings {
+        natsUrl(): string;
         fspiopSettings(): FspiopSettings;
     }
 
