@@ -48,6 +48,28 @@ export namespace FspiopMessagingSubjects {
             const base = `${RESPONSE_PREFIX}parties-error:${payer}:${payeeOrHub ?? Parties.ANY_PAYEE}:${partyIdType}:${partyId}`;
             return subId != null && subId.length > 0 ? `${base}:${subId}` : base;
         }
+
+        static toAnyPayeeSubject(subject: string): string | null {
+            const successPrefix = `${RESPONSE_PREFIX}parties:`;
+            const errorPrefix = `${RESPONSE_PREFIX}parties-error:`;
+            const prefix = subject.startsWith(successPrefix)
+                ? successPrefix
+                : subject.startsWith(errorPrefix)
+                    ? errorPrefix
+                    : null;
+
+            if (prefix == null) {
+                return null;
+            }
+
+            const tokens = subject.slice(prefix.length).split(':');
+            if (tokens.length < 4) {
+                return null;
+            }
+
+            tokens[1] = Parties.ANY_PAYEE;
+            return `${prefix}${tokens.join(':')}`;
+        }
     }
 
     export class Quotes {
