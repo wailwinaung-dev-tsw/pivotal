@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2024-2026 ThitsaWorks Pte. Ltd.
-import {Inject} from '@nestjs/common';
-import {CommandHandler, ICommandHandler} from '@nestjs/cqrs';
-import {TransactionMessage} from '@core/audit/common';
-import {AuditTransactionPublisher} from '@core/audit/producer';
-import {FspiopPubSubSubjects, FspiopResponsePublisher} from '@shared/fspiop';
-import {HandlePutTransfersErrorCommand} from './handle-put-transfers-error.command';
-import {resolveGatewayCorrelationId} from '../gateway-audit';
+import { Inject } from '@nestjs/common';
+import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
+import { AuditMessagingSubjects, FspiopMessagingSubjects, TransactionMessage } from '@shared/messaging';
+import { MESSAGE_BUS_PORT, MessageBusPort } from '../../port';
+import { HandlePutTransfersErrorCommand } from './handle-put-transfers-error.command';
+import { resolveGatewayCorrelationId } from '../gateway-audit';
 
 @CommandHandler(HandlePutTransfersErrorCommand)
 export class HandlePutTransfersErrorHandler
@@ -14,10 +13,8 @@ export class HandlePutTransfersErrorHandler
 {
 
     constructor(
-        @Inject(AuditTransactionPublisher)
-        private readonly auditPublisher: AuditTransactionPublisher,
-        @Inject(FspiopResponsePublisher)
-        private readonly publisher: FspiopResponsePublisher,
+        @Inject(MESSAGE_BUS_PORT)
+        private readonly bus: MessageBusPort,
     ) {
     }
 
@@ -31,7 +28,8 @@ export class HandlePutTransfersErrorHandler
         const auditCorrelationId = resolveGatewayCorrelationId(correlationId, transferId);
         const createdAt = new Date();
 
-        await this.auditPublisher.publish(
+        await this.bus.publish(
+            AuditMessagingSubjects.transaction,
             TransactionMessage.error(
                 TransactionMessage.InvocationPhase.Transfers,
                 TransactionMessage.InvocationGateway.Inbound,
@@ -45,12 +43,8 @@ export class HandlePutTransfersErrorHandler
             ),
         );
 
-        const subject = FspiopPubSubSubjects.Transfers.forError(
-            payerFsp,
-            transferId,
-        );
-
-        await this.publisher.publishError(subject, error);
+        const subject = FspiopMessagingSubjects.Transfers.forError(payerFsp, transferId);
+        await this.bus.publish(subject, error);
 
         return new HandlePutTransfersErrorCommand.Output();
     }

@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2024-2026 ThitsaWorks Pte. Ltd.
-import {DynamicModule, Module} from '@nestjs/common';
-import {CqrsModule} from '@nestjs/cqrs';
-import {AuditProducerModule} from '@core/audit/producer';
-import {ConnectorPublisherModule} from '@core/connector/publisher';
-import {FspiopPubSubModule} from '@shared/fspiop';
+import { Module } from '@nestjs/common';
+import { CqrsModule } from '@nestjs/cqrs';
+import { ConfigurableModuleClass } from './domain.module-definition';
 import {
     HandleGetPartiesHandler,
     HandlePatchTransfersHandler,
@@ -33,48 +31,9 @@ const CommandHandlers = [
     HandlePutTransfersErrorHandler,
 ];
 
-@Module({})
-export class InboundDomainModule {
-
-    static forRootAsync(asyncOptions: InboundDomainModule.AsyncOptions): DynamicModule {
-        return {
-            module: InboundDomainModule,
-            imports: [
-                CqrsModule,
-                FspiopPubSubModule.forRootAsync({
-                    imports: asyncOptions.imports ?? [],
-                    inject: asyncOptions.inject ?? [],
-                    useFactory: asyncOptions.useFactory,
-                }),
-                ConnectorPublisherModule.forRootAsync({
-                    imports: asyncOptions.imports ?? [],
-                    inject: asyncOptions.inject ?? [],
-                    useFactory: asyncOptions.useFactory,
-                }),
-                AuditProducerModule.forRootAsync({
-                    imports: asyncOptions.imports ?? [],
-                    inject: asyncOptions.inject ?? [],
-                    useFactory: asyncOptions.useFactory,
-                }),
-                ...(asyncOptions.imports ?? []),
-            ],
-            providers: [...CommandHandlers],
-            exports: [CqrsModule],
-        };
-    }
-}
-
-export namespace InboundDomainModule {
-
-    export interface RequiredSettings
-        extends FspiopPubSubModule.RequiredSettings,
-                ConnectorPublisherModule.RequiredSettings,
-                AuditProducerModule.RequiredSettings {
-    }
-
-    export type AsyncOptions = {
-        imports?: any[];
-        useFactory: (...args: any[]) => RequiredSettings | Promise<RequiredSettings>;
-        inject?: any[];
-    };
-}
+@Module({
+    imports: [CqrsModule],
+    providers: [...CommandHandlers],
+    exports: [CqrsModule, ...CommandHandlers],
+})
+export class InboundDomainModule extends ConfigurableModuleClass {}

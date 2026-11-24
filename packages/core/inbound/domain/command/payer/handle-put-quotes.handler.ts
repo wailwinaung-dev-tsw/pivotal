@@ -1,23 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2024-2026 ThitsaWorks Pte. Ltd.
-import {Inject} from '@nestjs/common';
-import {CommandHandler, ICommandHandler} from '@nestjs/cqrs';
-import {TransactionMessage} from '@core/audit/common';
-import {AuditTransactionPublisher} from '@core/audit/producer';
-import {FspiopPubSubSubjects, FspiopResponsePublisher} from '@shared/fspiop';
-import type {QuoteSuccessPayload} from '@shared/fspiop';
-import {HandlePutQuotesCommand} from './handle-put-quotes.command';
-import {resolveGatewayCorrelationId} from '../gateway-audit';
+import { Inject } from '@nestjs/common';
+import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
+import { AuditMessagingSubjects, FspiopMessagingSubjects, TransactionMessage } from '@shared/messaging';
+import { MESSAGE_BUS_PORT, MessageBusPort } from '../../port';
+import { HandlePutQuotesCommand } from './handle-put-quotes.command';
+import { resolveGatewayCorrelationId } from '../gateway-audit';
 
 @CommandHandler(HandlePutQuotesCommand)
 export class HandlePutQuotesHandler
     implements ICommandHandler<HandlePutQuotesCommand, HandlePutQuotesCommand.Output> {
 
     constructor(
-        @Inject(AuditTransactionPublisher)
-        private readonly auditPublisher: AuditTransactionPublisher,
-        @Inject(FspiopResponsePublisher)
-        private readonly publisher: FspiopResponsePublisher,
+        @Inject(MESSAGE_BUS_PORT)
+        private readonly bus: MessageBusPort,
     ) {
     }
 
@@ -31,7 +27,8 @@ export class HandlePutQuotesHandler
         const auditCorrelationId = resolveGatewayCorrelationId(correlationId, quoteId);
         const createdAt = new Date();
 
-        await this.auditPublisher.publish(
+        await this.bus.publish(
+            AuditMessagingSubjects.transaction,
             TransactionMessage.response(
                 TransactionMessage.InvocationPhase.Quotes,
                 TransactionMessage.InvocationGateway.Inbound,
@@ -45,12 +42,8 @@ export class HandlePutQuotesHandler
             ),
         );
 
-        const subject = FspiopPubSubSubjects.Quotes.forSuccess(
-            payerFsp,
-            quoteId,
-        );
-
-        await this.publisher.publishSuccess<QuoteSuccessPayload>(subject, {
+        const subject = FspiopMessagingSubjects.Quotes.forSuccess(payerFsp, quoteId);
+        await this.bus.publish(subject, {
             response,
             iso20022QuoteResponse,
         });

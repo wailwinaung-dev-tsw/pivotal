@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2024-2026 ThitsaWorks Pte. Ltd.
-import {Inject} from '@nestjs/common';
-import {CommandHandler, ICommandHandler} from '@nestjs/cqrs';
-import {FspiopPubSubSubjects, FspiopResponsePublisher} from '@shared/fspiop';
-import {HandlePutPartiesCommand} from './handle-put-parties.command';
+import { Inject } from '@nestjs/common';
+import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
+import { FspiopMessagingSubjects } from '@shared/messaging';
+import { MESSAGE_BUS_PORT, MessageBusPort } from '../../port';
+import { HandlePutPartiesCommand } from './handle-put-parties.command';
 
 @CommandHandler(HandlePutPartiesCommand)
 export class HandlePutPartiesHandler
     implements ICommandHandler<HandlePutPartiesCommand, HandlePutPartiesCommand.Output> {
 
     constructor(
-        @Inject(FspiopResponsePublisher)
-        private readonly publisher: FspiopResponsePublisher,
+        @Inject(MESSAGE_BUS_PORT)
+        private readonly bus: MessageBusPort,
     ) {
     }
 
@@ -22,7 +23,7 @@ export class HandlePutPartiesHandler
             return new HandlePutPartiesCommand.Output();
         }
 
-        const subject = FspiopPubSubSubjects.Parties.forSuccess(
+        const subject = FspiopMessagingSubjects.Parties.forSuccess(
             payerFsp,
             payeeFsp,
             partyIdType,
@@ -30,7 +31,7 @@ export class HandlePutPartiesHandler
             subId ?? undefined,
         );
 
-        await this.publisher.publishSuccess(subject, response);
+        await this.bus.publish(subject, response);
 
         return new HandlePutPartiesCommand.Output();
     }
