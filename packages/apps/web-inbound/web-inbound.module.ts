@@ -36,6 +36,7 @@ export class WebInboundModule {
                 const settings = await asyncOptions.useFactory(...args);
                 return {
                     url: settings.natsUrl?.() ?? 'nats://localhost:4222',
+                    timeoutMs: Number(process.env['NATS_ACK_TIMEOUT_MS'] ?? 2000),
                 };
             },
         });

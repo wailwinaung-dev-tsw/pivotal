@@ -5,7 +5,7 @@ import {
     ConfigurableModuleClass,
     MESSAGING_OPTIONS_TOKEN,
 } from './messaging.module-definition';
-import { MessagingOptions } from './messaging.schema';
+import { MessagingOptions, messagingOptionsSchema } from './messaging.schema';
 import { MESSAGE_BUS } from './message-bus.interface';
 import { NatsMessageBusService } from './providers/nats/nats-message-bus.service';
 
@@ -14,7 +14,11 @@ import { NatsMessageBusService } from './providers/nats/nats-message-bus.service
         {
             provide: NatsMessageBusService,
             useFactory: (options: MessagingOptions): NatsMessageBusService => {
-                return new NatsMessageBusService(options.url);
+                const validated = messagingOptionsSchema.parse(options);
+                return new NatsMessageBusService(validated.url, {
+                    streamName: validated.streamName,
+                    timeoutMs: validated.timeoutMs,
+                });
             },
             inject: [MESSAGING_OPTIONS_TOKEN],
         },

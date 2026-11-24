@@ -15,6 +15,8 @@ export const messagingOptionsSchema = z.object({
                 }
             });
         }, { message: 'Invalid Messaging URL format (e.g. nats://localhost:4222)' }),
+    streamName: z.string().min(1).optional(),
+    timeoutMs: z.number().positive().optional(),
 });
 
 export type MessagingOptions = z.infer<typeof messagingOptionsSchema>;

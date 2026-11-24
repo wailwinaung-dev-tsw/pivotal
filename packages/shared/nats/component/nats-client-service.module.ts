@@ -6,7 +6,7 @@ import {
     ConfigurableModuleClass,
     NATS_OPTIONS_TOKEN,
 } from './nats-client.module-definition';
-import { NatsOptions } from './nats.schema';
+import { NatsOptions, natsOptionsSchema } from './nats.schema';
 
 const LEGACY_REQUIRED_SETTINGS = Symbol('NatsClientServiceRequiredSettings');
 
@@ -15,7 +15,8 @@ const LEGACY_REQUIRED_SETTINGS = Symbol('NatsClientServiceRequiredSettings');
         {
             provide: NatsClientService,
             useFactory: (options: NatsOptions): NatsClientService => {
-                return new NatsClientService(options.url);
+                const validated = natsOptionsSchema.parse(options);
+                return new NatsClientService(validated.url);
             },
             inject: [NATS_OPTIONS_TOKEN],
         },
