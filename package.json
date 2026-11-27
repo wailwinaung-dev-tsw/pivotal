@@ -87,6 +87,7 @@
     "test:core-trust-domain": "node --test -r ts-node/register -r tsconfig-paths/register tests/core/trust/domain/component/*-test.ts",
     "test:apps-web-outbound": "node --test -r ts-node/register -r tsconfig-paths/register tests/apps/web-outbound/component/*-test.ts",
     "test:shared-nats": "node --test -r ts-node/register -r tsconfig-paths/register \"tests/shared/nats/**/*-test.ts\"",
+    "test:shared-redis": "node --test -r ts-node/register -r tsconfig-paths/register \"tests/shared/redis/**/*-test.ts\"",
     "test:shared-foundation": "node --test -r ts-node/register -r tsconfig-paths/register \"tests/shared/foundation/**/*-test.ts\"",
     "clean:fspiop-dto": "rm -rf packages/shared/fspiop/dto && mkdir -p packages/shared/fspiop/dto",
     "clean:catalyst-dto": "rm -rf packages/shared/catalyst/dto && mkdir -p packages/shared/catalyst/dto",

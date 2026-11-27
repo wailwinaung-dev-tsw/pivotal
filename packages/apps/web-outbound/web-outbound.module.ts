@@ -2,7 +2,7 @@
 // Copyright 2024-2026 ThitsaWorks Pte. Ltd.
 import { DynamicModule, MiddlewareConsumer, Module, NestModule, Provider, RequestMethod } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { GovernmentPayerDisplayNameStore, OutboundDomainModule, RedisClient } from '@core/outbound/domain';
+import { GovernmentPayerDisplayNameStore, OutboundDomainModule } from '@core/outbound/domain';
 import {
     ParticipantAccessKeyStore,
     ParticipantCertRepository,
@@ -13,6 +13,7 @@ import { AccessGuard, DfspCertificateGuard, JwtPolicy, ParticipantGovernmentPaye
 import { CentralRegistryController, CurrentFxRateController, DfspListController, SendMoneyController, TransferStatusController } from './controllers';
 import { WebOutboundSettings } from './required.settings';
 import { AccessKeyStore, PrivateKeyStore } from '@shared/security';
+import { IRedisClient, REDIS_CLIENT } from '@shared/redis';
 import { ParticipantSigningKeysCache } from "@core/participant/domain/component/store/participant-signing-keys-cache";
 
 const REQUIRED_SETTINGS = Symbol('WebOutboundRequiredSettings');
@@ -92,11 +93,11 @@ export class WebOutboundModule implements NestModule {
                     accessKeyStore: AccessKeyStore,
                     settings: WebOutboundModule.RequiredSettings,
                     reflector: Reflector,
-                    redisClient: RedisClient,
+                    redisClient: IRedisClient,
                 ): AccessGuard => {
                     return new AccessGuard(accessKeyStore, settings.jwtPolicy(), reflector, redisClient);
                 },
-                inject: [AccessKeyStore, REQUIRED_SETTINGS, Reflector, RedisClient],
+                inject: [AccessKeyStore, REQUIRED_SETTINGS, Reflector, REDIS_CLIENT],
             },
             {
                 provide: DfspCertificateGuard,

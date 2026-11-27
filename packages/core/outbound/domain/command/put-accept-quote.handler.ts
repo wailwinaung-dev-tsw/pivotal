@@ -12,6 +12,7 @@ import {
     RESPONSE_SUBSCRIBER,
     TransactionMessage,
 } from '@shared/messaging';
+import { IRedisClient, REDIS_CLIENT } from '@shared/redis';
 import {
     FspiopAxios,
     FspiopAxiosError,
@@ -26,7 +27,7 @@ import {
 } from '@shared/fspiop';
 import type {Iso20022PostTransfersContext, OriginalIso20022QuoteResponsePayload} from '@shared/iso20022';
 import { TransferRequest } from '../cache';
-import { AmountDecimalValidator, RedisClient } from '../component';
+import { AmountDecimalValidator } from '../component';
 import { SendMoneyResponse } from '../dto';
 import { PutAcceptQuoteCommand } from './put-accept-quote.command';
 import { SendMoneyResponseMapper } from './send-money-response.mapper';
@@ -49,8 +50,8 @@ export class PutAcceptQuoteHandler
         private readonly fspiopAxios: FspiopAxios,
         @Inject(RESPONSE_SUBSCRIBER)
         private readonly subscriber: IResponseSubscriber,
-        @Inject(RedisClient)
-        private readonly redisClient: RedisClient,
+        @Inject(REDIS_CLIENT)
+        private readonly redisClient: IRedisClient,
         @Inject(MESSAGE_BUS)
         private readonly bus: IMessageBus,
         @Inject(AmountDecimalValidator)

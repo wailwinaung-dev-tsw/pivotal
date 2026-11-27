@@ -12,6 +12,7 @@ import {
     RESPONSE_SUBSCRIBER,
     TransactionMessage,
 } from '@shared/messaging';
+import { IRedisClient, REDIS_CLIENT } from '@shared/redis';
 import {
     Currency,
     ExtensionList,
@@ -33,7 +34,7 @@ import {
 } from '@shared/fspiop';
 import type {QuoteSuccessPayload} from '@shared/fspiop';
 import { TransferRequest } from '../cache';
-import { AmountDecimalValidator, PayerProvidedFeesValidator, RedisClient, SuspiciousTransactionMonitor } from '../component';
+import { AmountDecimalValidator, PayerProvidedFeesValidator, SuspiciousTransactionMonitor } from '../component';
 import { SendMoneyResponse } from '../dto';
 import { PutAcceptPartyCommand } from './put-accept-party.command';
 import { SendMoneyResponseMapper } from './send-money-response.mapper';
@@ -57,8 +58,8 @@ export class PutAcceptPartyHandler
         private readonly fspiopAxios: FspiopAxios,
         @Inject(RESPONSE_SUBSCRIBER)
         private readonly subscriber: IResponseSubscriber,
-        @Inject(RedisClient)
-        private readonly redisClient: RedisClient,
+        @Inject(REDIS_CLIENT)
+        private readonly redisClient: IRedisClient,
         @Inject(MESSAGE_BUS)
         private readonly bus: IMessageBus,
         @Inject(AmountDecimalValidator)

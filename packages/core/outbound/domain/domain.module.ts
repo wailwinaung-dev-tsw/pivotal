@@ -7,10 +7,11 @@ import { Transaction } from '@core/audit/domain/model';
 import { PIVOTAL_DB_READ_CONNECTION_NAME } from '@core/audit/domain/repository';
 import { AmountTypeConstraint, FspiopAccessTokenProvider, FspiopAxios, FspiopBearerTokenInterceptor, FspiopSettings, FspiopSigningInterceptor, JwsSigner, MutualTlsAgent } from '@shared/fspiop';
 import { MessagingModule } from '@shared/messaging';
+import { IRedisClient, REDIS_CLIENT, RedisModule } from '@shared/redis';
 import { PostSendMoneyHandler, PutAcceptPartyHandler, PutAcceptQuoteHandler, RegisterMsisdnHandler } from './command';
 import { GetCurrentFxRateHandler, GetDfspListByUsecaseHandler, GetDfspListHandler, GetTransferStatusHandler } from './query';
 import {Iso20022Transformer} from '@shared/iso20022/iso20022-transformer';
-import { AmountDecimalValidator, GovernmentPayerNameResolver, HasPayeeFspIdConstraint, OracleCentralRegistryClient, OutboundSettings, PayerProvidedFeesValidator, PrefixOracleClient, RedisClient, SuspiciousTransactionMonitor, TransferStatusRepository } from './component';
+import { AmountDecimalValidator, GovernmentPayerNameResolver, HasPayeeFspIdConstraint, OracleCentralRegistryClient, OutboundSettings, PayerProvidedFeesValidator, PrefixOracleClient, SuspiciousTransactionMonitor, TransferStatusRepository } from './component';
 import * as https from "node:https";
 import { CaStore, ClientCertStore, PrivateKeyStore } from "@shared/security";
 import { CatalystAxios } from '@shared/catalyst';
@@ -46,6 +47,14 @@ export class OutboundDomainModule {
                     }),
                 }),
                 NestJsTypeOrmModule.forFeature([Transaction], PIVOTAL_DB_READ_CONNECTION_NAME),
+                RedisModule.registerAsync({
+                    imports: asyncOptions.imports ?? [],
+                    inject: [REQUIRED_SETTINGS],
+                    useFactory: (settings: OutboundDomainModule.RequiredSettings) => ({
+                        url: settings.outboundSettings().redisUrl,
+                        defaultTtlMs: settings.outboundSettings().redisCacheItemTimeoutMs,
+                    }),
+                }),
                 ...(asyncOptions.imports ?? []),
             ],
             providers: [
@@ -57,7 +66,7 @@ export class OutboundDomainModule {
                 ...OutboundDomainModule.createProviders(asyncOptions),
                 ...(asyncOptions.providers ?? []),
             ],
-            exports: [CqrsModule, RedisClient],
+            exports: [CqrsModule, REDIS_CLIENT],
         };
     }
 
@@ -74,17 +83,10 @@ export class OutboundDomainModule {
                 inject: [OutboundSettings],
             },
             {
-                provide: RedisClient,
-                useFactory: (outboundSettings: OutboundSettings): RedisClient => {
-                    return new RedisClient(outboundSettings.redisUrl, outboundSettings.redisCacheItemTimeoutMs);
-                },
-                inject: [OutboundSettings],
-            },
-            {
                 provide: SuspiciousTransactionMonitor,
                 useFactory: (
                     outboundSettings: OutboundSettings,
-                    redisClient: RedisClient,
+                    redisClient: IRedisClient,
                 ): SuspiciousTransactionMonitor =>
                     new SuspiciousTransactionMonitor(
                         redisClient,
@@ -93,7 +95,7 @@ export class OutboundDomainModule {
                         outboundSettings.suspiciousTxnMonitoringEnabled,
                         outboundSettings.suspiciousTxnMatchingFields,
                     ),
-                inject: [OutboundSettings, RedisClient],
+                inject: [OutboundSettings, REDIS_CLIENT],
             },
             {
                 provide: AmountDecimalValidator,
@@ -128,7 +130,7 @@ export class OutboundDomainModule {
             },
             {
                 provide: PrefixOracleClient,
-                useFactory: (outboundSettings: OutboundSettings, redisClient: RedisClient): PrefixOracleClient => {
+                useFactory: (outboundSettings: OutboundSettings, redisClient: IRedisClient): PrefixOracleClient => {
                     return new PrefixOracleClient(
                         outboundSettings.prefixOracleEndpoint,
                         outboundSettings.prefixOracleAxiosParams,
@@ -136,7 +138,7 @@ export class OutboundDomainModule {
                         outboundSettings.prefixOracleCacheTtlMs,
                     );
                 },
-                inject: [OutboundSettings, RedisClient],
+                inject: [OutboundSettings, REDIS_CLIENT],
             },
             {
                 provide: OracleCentralRegistryClient,
