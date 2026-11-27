@@ -97,9 +97,9 @@ function createHandler(
             async delete(): Promise<void> {},
         } as never,
         {
-            async publish(message: TransactionMessage): Promise<void> {
+            async publish(_subject: string, message: unknown): Promise<void> {
                 if (deps.publish != null) {
-                    await deps.publish(message);
+                    await deps.publish(message as TransactionMessage);
                 }
             },
         } as never,

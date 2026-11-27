@@ -3,10 +3,10 @@
 import { DynamicModule, Module, Provider } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
 import { TypeOrmModule as NestJsTypeOrmModule } from '@nestjs/typeorm';
-import { AuditProducerModule } from '@core/audit/producer';
 import { Transaction } from '@core/audit/domain/model';
 import { PIVOTAL_DB_READ_CONNECTION_NAME } from '@core/audit/domain/repository';
-import { AmountTypeConstraint, FspiopAccessTokenProvider, FspiopAxios, FspiopBearerTokenInterceptor, FspiopPubSubModule, FspiopSettings, FspiopSigningInterceptor, JwsSigner, MutualTlsAgent } from '@shared/fspiop';
+import { AmountTypeConstraint, FspiopAccessTokenProvider, FspiopAxios, FspiopBearerTokenInterceptor, FspiopSettings, FspiopSigningInterceptor, JwsSigner, MutualTlsAgent } from '@shared/fspiop';
+import { MessagingModule } from '@shared/messaging';
 import { PostSendMoneyHandler, PutAcceptPartyHandler, PutAcceptQuoteHandler, RegisterMsisdnHandler } from './command';
 import { GetCurrentFxRateHandler, GetDfspListByUsecaseHandler, GetDfspListHandler, GetTransferStatusHandler } from './query';
 import {Iso20022Transformer} from '@shared/iso20022/iso20022-transformer';
@@ -37,15 +37,13 @@ export class OutboundDomainModule {
             module: OutboundDomainModule,
             imports: [
                 CqrsModule,
-                FspiopPubSubModule.forRootAsync({
+                MessagingModule.registerAsync({
                     imports: asyncOptions.imports ?? [],
-                    inject: asyncOptions.inject ?? [],
-                    useFactory: asyncOptions.useFactory,
-                }),
-                AuditProducerModule.forRootAsync({
-                    imports: asyncOptions.imports ?? [],
-                    inject: asyncOptions.inject ?? [],
-                    useFactory: asyncOptions.useFactory,
+                    inject: [REQUIRED_SETTINGS],
+                    useFactory: (settings: OutboundDomainModule.RequiredSettings) => ({
+                        url: settings.natsUrl(),
+                        timeoutMs: settings.natsTimeoutMs?.() ?? 2000,
+                    }),
                 }),
                 NestJsTypeOrmModule.forFeature([Transaction], PIVOTAL_DB_READ_CONNECTION_NAME),
                 ...(asyncOptions.imports ?? []),
@@ -57,6 +55,7 @@ export class OutboundDomainModule {
                     inject: asyncOptions.inject ?? [],
                 },
                 ...OutboundDomainModule.createProviders(asyncOptions),
+                ...(asyncOptions.providers ?? []),
             ],
             exports: [CqrsModule, RedisClient],
         };
@@ -230,11 +229,10 @@ export class OutboundDomainModule {
 
 export namespace OutboundDomainModule {
 
-    export interface RequiredSettings
-        extends FspiopPubSubModule.RequiredSettings,
-        AuditProducerModule.RequiredSettings {
-
+    export interface RequiredSettings {
         outboundSettings(): OutboundSettings;
+        natsUrl(): string;
+        natsTimeoutMs?(): number;
     }
 
     export type AsyncOptions = {

@@ -131,7 +131,7 @@ describe('PutAcceptPartyHandler', () => {
                     },
                 } as never,
                 {
-                    async publish(message: TransactionMessage): Promise<void> {
+                    async publish(_subject: string, message: unknown): Promise<void> {
                         assert.ok(message);
                     },
                 } as never,
@@ -187,7 +187,7 @@ describe('PutAcceptPartyHandler', () => {
                 },
             } as never,
             {
-                async publish(message: TransactionMessage): Promise<void> {
+                async publish(_subject: string, message: unknown): Promise<void> {
                     assert.ok(message);
                 },
             } as never,
@@ -248,7 +248,7 @@ describe('PutAcceptPartyHandler', () => {
                 },
             } as never,
             {
-                async publish(message: TransactionMessage): Promise<void> {
+                async publish(_subject: string, message: unknown): Promise<void> {
                     assert.ok(message);
                 },
             } as never,

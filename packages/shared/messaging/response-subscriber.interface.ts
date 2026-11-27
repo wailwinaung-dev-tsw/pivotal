@@ -15,4 +15,6 @@ export interface IResponseSubscriber {
     ): Waiter<T>;
 }
 
+export const DEFAULT_RESPONSE_TIMEOUT_MS = 30_000;
+
 export const RESPONSE_SUBSCRIBER = Symbol('IResponseSubscriber');

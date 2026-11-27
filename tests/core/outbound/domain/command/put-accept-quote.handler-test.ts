@@ -125,8 +125,8 @@ function createHandler(cachedRequest: TransferRequest) {
             },
         } as never,
         {
-            async publish(message: TransactionMessage): Promise<void> {
-                publishedMessages.push(message);
+            async publish(_subject: string, message: unknown): Promise<void> {
+                publishedMessages.push(message as TransactionMessage);
             },
         } as never,
         {

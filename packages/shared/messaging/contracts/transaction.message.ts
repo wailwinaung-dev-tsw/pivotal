@@ -8,6 +8,8 @@ import {
     TransactionScenario,
 } from '@shared/fspiop';
 
+export const AUDIT_TRANSACTION_SUBJECT = 'audit.transaction';
+
 export class TransactionMessage<TContent = TransactionMessage.Content> {
 
     constructor(
