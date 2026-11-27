@@ -22,6 +22,10 @@ export class WebOutboundSettings
         return this.readRequiredString('NATS_URL');
     }
 
+    natsTimeoutMs(): number {
+        return this.readPositiveInteger('NATS_ACK_TIMEOUT_MS') ?? 2000;
+    }
+
     writeTypeOrmSettings(): TypeOrmSettings {
         return new TypeOrmSettings(
             this.readRequiredString('DB_WRITE_HOST'),

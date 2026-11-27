@@ -2,7 +2,7 @@
 // Copyright 2024-2026 ThitsaWorks Pte. Ltd.
 import {CanActivate, ExecutionContext} from '@nestjs/common';
 import {Reflector} from '@nestjs/core';
-import {RedisClient} from '@core/outbound/domain/component/redis-client';
+import {IRedisClient} from '@shared/redis';
 import {FspiopErrors, FspiopException, FspiopHeaders} from '@shared/fspiop';
 import {AccessKeyStore, PublicKey} from '@shared/security';
 import {Jwt} from '@shared/security/component/jwt';
@@ -27,7 +27,7 @@ export class AccessGuard implements CanActivate {
         private readonly accessKeyStore: AccessKeyStore,
         private readonly policy: JwtPolicy,
         private readonly reflector: Reflector,
-        private readonly redisClient: RedisClient,
+        private readonly redisClient: IRedisClient,
     ) {
     }
 

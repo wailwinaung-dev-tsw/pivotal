@@ -2,8 +2,17 @@
 // Copyright 2024-2026 ThitsaWorks Pte. Ltd.
 import { Inject, Logger } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { TransactionMessage } from '@core/audit/common';
-import { AuditTransactionPublisher } from '@core/audit/producer';
+import {
+    AUDIT_TRANSACTION_SUBJECT,
+    DEFAULT_RESPONSE_TIMEOUT_MS,
+    FspiopMessagingSubjects,
+    IMessageBus,
+    IResponseSubscriber,
+    MESSAGE_BUS,
+    RESPONSE_SUBSCRIBER,
+    TransactionMessage,
+} from '@shared/messaging';
+import { IRedisClient, REDIS_CLIENT } from '@shared/redis';
 import {
     FspiopAxios,
     FspiopAxiosError,
@@ -11,8 +20,6 @@ import {
     FspiopErrorTranslator,
     FspiopException,
     FspiopHeaders,
-    FspiopPubSubSubjects,
-    FspiopResponseSubscriber,
     Party,
     QuotesIDPutResponse,
     TransfersIDPutResponse,
@@ -20,7 +27,7 @@ import {
 } from '@shared/fspiop';
 import type {Iso20022PostTransfersContext, OriginalIso20022QuoteResponsePayload} from '@shared/iso20022';
 import { TransferRequest } from '../cache';
-import { AmountDecimalValidator, RedisClient } from '../component';
+import { AmountDecimalValidator } from '../component';
 import { SendMoneyResponse } from '../dto';
 import { PutAcceptQuoteCommand } from './put-accept-quote.command';
 import { SendMoneyResponseMapper } from './send-money-response.mapper';
@@ -33,7 +40,7 @@ export class PutAcceptQuoteHandler
     // timeout) so a gateway/client retry landing on another replica is rejected
     // for the whole window the winning replica is still talking to the Hub.
     // Released in finally; the TTL is only the crash backstop.
-    private static readonly IN_FLIGHT_LOCK_TTL_MS = FspiopResponseSubscriber.DEFAULT_TIMEOUT_MS + 10_000;
+    private static readonly IN_FLIGHT_LOCK_TTL_MS = DEFAULT_RESPONSE_TIMEOUT_MS + 10_000;
     private static readonly HOME_TRANSACTION_ID_EXTENSION_KEY = 'homeTransactionId';
 
     private readonly logger = new Logger(PutAcceptQuoteHandler.name);
@@ -41,12 +48,12 @@ export class PutAcceptQuoteHandler
     constructor(
         @Inject(FspiopAxios)
         private readonly fspiopAxios: FspiopAxios,
-        @Inject(FspiopResponseSubscriber)
-        private readonly subscriber: FspiopResponseSubscriber,
-        @Inject(RedisClient)
-        private readonly redisClient: RedisClient,
-        @Inject(AuditTransactionPublisher)
-        private readonly auditPublisher: AuditTransactionPublisher,
+        @Inject(RESPONSE_SUBSCRIBER)
+        private readonly subscriber: IResponseSubscriber,
+        @Inject(REDIS_CLIENT)
+        private readonly redisClient: IRedisClient,
+        @Inject(MESSAGE_BUS)
+        private readonly bus: IMessageBus,
         @Inject(AmountDecimalValidator)
         private readonly amountDecimalValidator: AmountDecimalValidator,
     ) {
@@ -210,7 +217,8 @@ export class PutAcceptQuoteHandler
         const createdAt = new Date();
         this.amountDecimalValidator.validate(transfersPostRequest.amount);
 
-        await this.auditPublisher.publish(
+        await this.bus.publish(
+            AUDIT_TRANSACTION_SUBJECT,
             TransactionMessage.request(
                 TransactionMessage.InvocationPhase.Transfers,
                 TransactionMessage.InvocationGateway.Outbound,
@@ -233,8 +241,8 @@ export class PutAcceptQuoteHandler
             }
 
             const headers = FspiopHeaders.Values.Transfers.forRequest(transferId, source, destination);
-            const successSubject = FspiopPubSubSubjects.Transfers.forSuccess(source, transferId);
-            const errorSubject = FspiopPubSubSubjects.Transfers.forError(source, transferId);
+            const successSubject = FspiopMessagingSubjects.Transfers.forSuccess(source, transferId);
+            const errorSubject = FspiopMessagingSubjects.Transfers.forError(source, transferId);
 
             const waiter = this.subscriber.waitFor<TransfersIDPutResponse>(
                 successSubject,
@@ -261,7 +269,8 @@ export class PutAcceptQuoteHandler
             transferRequest.transfer = callback;
             const response = PutAcceptQuoteHandler.toResponse(transferRequest, callback);
 
-            await this.auditPublisher.publish(
+            await this.bus.publish(
+                AUDIT_TRANSACTION_SUBJECT,
                 TransactionMessage.response(
                     TransactionMessage.InvocationPhase.Transfers,
                     TransactionMessage.InvocationGateway.Outbound,
@@ -283,7 +292,8 @@ export class PutAcceptQuoteHandler
             const fspiopException = PutAcceptQuoteHandler.toFspiopException(error, transferId);
 
             try {
-                await this.auditPublisher.publish(
+                await this.bus.publish(
+                    AUDIT_TRANSACTION_SUBJECT,
                     TransactionMessage.error(
                         TransactionMessage.InvocationPhase.Transfers,
                         TransactionMessage.InvocationGateway.Outbound,

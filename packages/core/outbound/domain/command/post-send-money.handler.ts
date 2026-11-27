@@ -2,8 +2,16 @@
 // Copyright 2024-2026 ThitsaWorks Pte. Ltd.
 import { Inject, Logger } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { TransactionMessage } from '@core/audit/common';
-import { AuditTransactionPublisher } from '@core/audit/producer';
+import {
+    AUDIT_TRANSACTION_SUBJECT,
+    FspiopMessagingSubjects,
+    IMessageBus,
+    IResponseSubscriber,
+    MESSAGE_BUS,
+    RESPONSE_SUBSCRIBER,
+    TransactionMessage,
+} from '@shared/messaging';
+import { IRedisClient, REDIS_CLIENT } from '@shared/redis';
 import {
     ExtensionList,
     FspiopAxios,
@@ -12,15 +20,13 @@ import {
     FspiopErrorTranslator,
     FspiopException,
     FspiopHeaders,
-    FspiopPubSubSubjects,
-    FspiopResponseSubscriber,
     PartiesTypeIDPutResponse,
     Party,
     PartyComplexName,
     PartyIdInfo,
     PartyPersonalInfo,
 } from '@shared/fspiop';
-import { AmountDecimalValidator, GovernmentPayerNameResolver, RedisClient } from '../component';
+import { AmountDecimalValidator, GovernmentPayerNameResolver } from '../component';
 import { TransferRequest } from '../cache';
 import { FspParty, SendMoneyRequest } from '../dto';
 import { PostSendMoneyCommand } from './post-send-money.command';
@@ -35,12 +41,12 @@ export class PostSendMoneyHandler
     constructor(
         @Inject(FspiopAxios)
         private readonly fspiopAxios: FspiopAxios,
-        @Inject(FspiopResponseSubscriber)
-        private readonly subscriber: FspiopResponseSubscriber,
-        @Inject(RedisClient)
-        private readonly redisClient: RedisClient,
-        @Inject(AuditTransactionPublisher)
-        private readonly auditPublisher: AuditTransactionPublisher,
+        @Inject(RESPONSE_SUBSCRIBER)
+        private readonly subscriber: IResponseSubscriber,
+        @Inject(REDIS_CLIENT)
+        private readonly redisClient: IRedisClient,
+        @Inject(MESSAGE_BUS)
+        private readonly bus: IMessageBus,
         @Inject(AmountDecimalValidator)
         private readonly amountDecimalValidator: AmountDecimalValidator,
         @Inject(GovernmentPayerNameResolver)
@@ -205,7 +211,8 @@ export class PostSendMoneyHandler
 
         const headers = FspiopHeaders.Values.Parties.forRequest(correlationId, source, destination);
         try {
-            await this.auditPublisher.publish(
+            await this.bus.publish(
+                AUDIT_TRANSACTION_SUBJECT,
                 TransactionMessage.request(
                     TransactionMessage.InvocationPhase.Parties,
                     TransactionMessage.InvocationGateway.Outbound,
@@ -236,9 +243,9 @@ export class PostSendMoneyHandler
                 ),
             );
 
-            const successSubject = FspiopPubSubSubjects.Parties.forSuccess(source, destination, type, id, subId);
-            const errorSubject = FspiopPubSubSubjects.Parties.forError(source, destination, type, id, subId);
-            const hubErrorSubject = FspiopPubSubSubjects.Parties.forError(source, switchId, type, id, subId);
+            const successSubject = FspiopMessagingSubjects.Parties.forSuccess(source, destination, type, id, subId);
+            const errorSubject = FspiopMessagingSubjects.Parties.forError(source, destination, type, id, subId);
+            const hubErrorSubject = FspiopMessagingSubjects.Parties.forError(source, switchId, type, id, subId);
 
             const waiter = this.subscriber.waitFor<PartiesTypeIDPutResponse>(
                 successSubject,
@@ -270,7 +277,8 @@ export class PostSendMoneyHandler
             const response = SendMoneyResponseMapper.toWaitingForPartyAcceptance(cachedTransaction);
 
             await this.redisClient.set(transferId, cachedTransaction);
-            await this.auditPublisher.publish(
+            await this.bus.publish(
+                AUDIT_TRANSACTION_SUBJECT,
                 TransactionMessage.response(
                     TransactionMessage.InvocationPhase.Parties,
                     TransactionMessage.InvocationGateway.Outbound,
@@ -298,7 +306,8 @@ export class PostSendMoneyHandler
             this.logger.error(`Post SendMoney Error Response for FromIdValue ${request.from.idValue} toIdValue ${request.to.idValue} : ${JSON.stringify(error)}`);
             const fspiopException = PostSendMoneyHandler.toFspiopException(error);
             try {
-                await this.auditPublisher.publish(
+                await this.bus.publish(
+                    AUDIT_TRANSACTION_SUBJECT,
                     TransactionMessage.error(
                         TransactionMessage.InvocationPhase.Parties,
                         TransactionMessage.InvocationGateway.Outbound,

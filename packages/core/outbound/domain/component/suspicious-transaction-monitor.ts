@@ -2,7 +2,7 @@
 // Copyright 2024-2026 ThitsaWorks Pte. Ltd.
 import { Logger } from '@nestjs/common';
 import { FspiopErrors, FspiopException } from '@shared/fspiop';
-import { RedisClient } from './redis-client';
+import { IRedisClient } from '@shared/redis';
 
 /**
  * Allowlisted env tokens for {@code SUSPICIOUS_TRANSACTION_MATCHING_FIELDS}.
@@ -45,7 +45,7 @@ export class SuspiciousTransactionMonitor {
     private readonly logger = new Logger(SuspiciousTransactionMonitor.name);
 
     constructor(
-        private readonly redisClient: RedisClient,
+        private readonly redisClient: IRedisClient,
         private readonly windowMs: number,
         private readonly threshold: number,
         private readonly enabled: boolean = true,

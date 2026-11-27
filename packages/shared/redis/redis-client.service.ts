@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2024-2026 ThitsaWorks Pte. Ltd.
-import {Logger, OnModuleDestroy, OnModuleInit} from '@nestjs/common';
-import {randomUUID} from 'node:crypto';
-import {createClient, RedisClientType} from 'redis';
-import {OutboundSettings} from './outbound-settings';
+import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { createClient, RedisClientType } from 'redis';
+import { IRedisClient } from './redis.interface';
+import { REDIS_OPTIONS_TOKEN } from './redis.module-definition';
+import { RedisOptions, redisOptionsSchema } from './redis.schema';
 
-export class RedisClient implements OnModuleInit, OnModuleDestroy {
+@Injectable()
+export class RedisClientService implements IRedisClient, OnModuleInit, OnModuleDestroy {
 
     // While Redis is down the client retries every few seconds; only re-log the
     // ongoing outage once per this window so a multi-hour outage stays readable.
@@ -28,15 +31,18 @@ export class RedisClient implements OnModuleInit, OnModuleDestroy {
         "if count == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[1]) end " +
         "return count";
 
-    private readonly logger = new Logger(RedisClient.name);
+    private readonly logger = new Logger(RedisClientService.name);
     private readonly client: RedisClientType;
     private readonly defaultTtlMs: number;
     private connectionLost = false;
     private lastOutageLogAt = 0;
 
-    constructor(private readonly url: string, timeoutMs: number) {
+    constructor(@Inject(REDIS_OPTIONS_TOKEN) options: RedisOptions) {
+        const validated = redisOptionsSchema.parse(options);
+        this.defaultTtlMs = validated.defaultTtlMs ?? 0;
+
         this.client = createClient({
-            url: this.url,
+            url: validated.url,
             socket: {
                 // Reconnect with capped backoff instead of letting the process die.
                 reconnectStrategy: (retries) => Math.min(retries * 100, 3000),
@@ -52,7 +58,7 @@ export class RedisClient implements OnModuleInit, OnModuleDestroy {
             const now = Date.now();
 
             if (this.connectionLost) {
-                if (now - this.lastOutageLogAt >= RedisClient.OUTAGE_LOG_INTERVAL_MS) {
+                if (now - this.lastOutageLogAt >= RedisClientService.OUTAGE_LOG_INTERVAL_MS) {
                     this.lastOutageLogAt = now;
                     this.logger.warn(`Redis still unavailable: ${detail}`);
                 }
@@ -70,8 +76,6 @@ export class RedisClient implements OnModuleInit, OnModuleDestroy {
                 this.logger.log('Redis connection re-established.');
             }
         });
-
-        this.defaultTtlMs = timeoutMs;
     }
 
     private describeError(error: unknown): string {
@@ -97,7 +101,6 @@ export class RedisClient implements OnModuleInit, OnModuleDestroy {
 
     async get<T>(key: string): Promise<T | undefined> {
         const value = await this.client.get(key);
-
         if (value == null) {
             return undefined;
         }
@@ -114,7 +117,7 @@ export class RedisClient implements OnModuleInit, OnModuleDestroy {
             return;
         }
 
-        await this.client.set(key, serialized, {PX: resolvedTtlMs});
+        await this.client.set(key, serialized, { PX: resolvedTtlMs });
     }
 
     async delete(key: string): Promise<void> {
@@ -131,7 +134,7 @@ export class RedisClient implements OnModuleInit, OnModuleDestroy {
             throw new Error(`incrementWithTtl requires a positive ttlMs; got ${ttlMs}`);
         }
 
-        const count = await this.client.eval(RedisClient.INCREMENT_WITH_TTL_SCRIPT, {
+        const count = await this.client.eval(RedisClientService.INCREMENT_WITH_TTL_SCRIPT, {
             keys: [key],
             arguments: [String(ttlMs)],
         });
@@ -155,15 +158,10 @@ export class RedisClient implements OnModuleInit, OnModuleDestroy {
     /**
      * Acquire a single-holder distributed lock for `key`. Returns an opaque token
      * when the lock was taken, or undefined when another holder already owns it.
-     *
-     * `SET NX PX` makes the lock auto-expire after `ttlMs` so a crashed holder
-     * cannot deadlock the key. Callers must pass a TTL that comfortably exceeds the
-     * longest in-flight operation guarded by the lock and always release it in a
-     * `finally` block; the TTL is only the crash backstop.
      */
     async acquireLock(key: string, ttlMs: number): Promise<string | undefined> {
         const token = randomUUID();
-        const result = await this.client.set(RedisClient.lockKey(key), token, {
+        const result = await this.client.set(RedisClientService.lockKey(key), token, {
             NX: true,
             PX: ttlMs,
         });
@@ -172,15 +170,13 @@ export class RedisClient implements OnModuleInit, OnModuleDestroy {
     }
 
     /**
-     * Release a lock previously taken via {@link acquireLock}, but only if this
-     * token still owns it. Best-effort: a failure here (e.g. Redis blip) is logged
-     * and swallowed so it never masks the outcome of the work the lock guarded —
-     * the TTL guarantees the lock is eventually freed regardless.
+     * Release a lock previously taken via acquireLock, but only if this
+     * token still owns it.
      */
     async releaseLock(key: string, token: string): Promise<void> {
         try {
-            await this.client.eval(RedisClient.RELEASE_LOCK_SCRIPT, {
-                keys: [RedisClient.lockKey(key)],
+            await this.client.eval(RedisClientService.RELEASE_LOCK_SCRIPT, {
+                keys: [RedisClientService.lockKey(key)],
                 arguments: [token],
             });
         } catch (error) {
@@ -189,7 +185,7 @@ export class RedisClient implements OnModuleInit, OnModuleDestroy {
     }
 
     private static lockKey(key: string): string {
-        return `${RedisClient.LOCK_KEY_PREFIX}${key}`;
+        return `${RedisClientService.LOCK_KEY_PREFIX}${key}`;
     }
 
     rawClient(): RedisClientType {

@@ -2,8 +2,17 @@
 // Copyright 2024-2026 ThitsaWorks Pte. Ltd.
 import { Inject, Logger } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { TransactionMessage } from '@core/audit/common';
-import { AuditTransactionPublisher } from '@core/audit/producer';
+import {
+    AUDIT_TRANSACTION_SUBJECT,
+    DEFAULT_RESPONSE_TIMEOUT_MS,
+    FspiopMessagingSubjects,
+    IMessageBus,
+    IResponseSubscriber,
+    MESSAGE_BUS,
+    RESPONSE_SUBSCRIBER,
+    TransactionMessage,
+} from '@shared/messaging';
+import { IRedisClient, REDIS_CLIENT } from '@shared/redis';
 import {
     Currency,
     ExtensionList,
@@ -15,8 +24,6 @@ import {
     FspiopException,
     FspiopHeaders,
     FspiopMoney,
-    FspiopPubSubSubjects,
-    FspiopResponseSubscriber,
     Money,
     Party,
     QuotesIDPutResponse,
@@ -27,7 +34,7 @@ import {
 } from '@shared/fspiop';
 import type {QuoteSuccessPayload} from '@shared/fspiop';
 import { TransferRequest } from '../cache';
-import { AmountDecimalValidator, PayerProvidedFeesValidator, RedisClient, SuspiciousTransactionMonitor } from '../component';
+import { AmountDecimalValidator, PayerProvidedFeesValidator, SuspiciousTransactionMonitor } from '../component';
 import { SendMoneyResponse } from '../dto';
 import { PutAcceptPartyCommand } from './put-accept-party.command';
 import { SendMoneyResponseMapper } from './send-money-response.mapper';
@@ -42,19 +49,19 @@ export class PutAcceptPartyHandler
     // timeout) so a gateway/client retry landing on another replica is rejected
     // for the whole window the winning replica is still talking to the Hub.
     // Released in finally; the TTL is only the crash backstop.
-    private static readonly IN_FLIGHT_LOCK_TTL_MS = FspiopResponseSubscriber.DEFAULT_TIMEOUT_MS + 10_000;
+    private static readonly IN_FLIGHT_LOCK_TTL_MS = DEFAULT_RESPONSE_TIMEOUT_MS + 10_000;
 
     private readonly logger = new Logger(PutAcceptPartyHandler.name);
 
     constructor(
         @Inject(FspiopAxios)
         private readonly fspiopAxios: FspiopAxios,
-        @Inject(FspiopResponseSubscriber)
-        private readonly subscriber: FspiopResponseSubscriber,
-        @Inject(RedisClient)
-        private readonly redisClient: RedisClient,
-        @Inject(AuditTransactionPublisher)
-        private readonly auditPublisher: AuditTransactionPublisher,
+        @Inject(RESPONSE_SUBSCRIBER)
+        private readonly subscriber: IResponseSubscriber,
+        @Inject(REDIS_CLIENT)
+        private readonly redisClient: IRedisClient,
+        @Inject(MESSAGE_BUS)
+        private readonly bus: IMessageBus,
         @Inject(AmountDecimalValidator)
         private readonly amountDecimalValidator: AmountDecimalValidator,
         @Inject(PayerProvidedFeesValidator)
@@ -124,7 +131,8 @@ export class PutAcceptPartyHandler
         const { quotesUrl } = this.fspiopAxios.settings;
         const createdAt = new Date();
 
-        await this.auditPublisher.publish(
+        await this.bus.publish(
+            AUDIT_TRANSACTION_SUBJECT,
             TransactionMessage.request(
                 TransactionMessage.InvocationPhase.Quotes,
                 TransactionMessage.InvocationGateway.Outbound,
@@ -159,8 +167,8 @@ export class PutAcceptPartyHandler
             });
 
             const headers = FspiopHeaders.Values.Quotes.forRequest(quoteId, source, destination);
-            const successSubject = FspiopPubSubSubjects.Quotes.forSuccess(source, quoteId);
-            const errorSubject = FspiopPubSubSubjects.Quotes.forError(source, quoteId);
+            const successSubject = FspiopMessagingSubjects.Quotes.forSuccess(source, quoteId);
+            const errorSubject = FspiopMessagingSubjects.Quotes.forError(source, quoteId);
 
 
             const waitPromise = this.subscriber.waitFor<QuoteSuccessPayload>(
@@ -191,7 +199,8 @@ export class PutAcceptPartyHandler
             const response = PutAcceptPartyHandler.toResponse(transferRequest, callback);
 
             await this.redisClient.set(transferId, transferRequest);
-            await this.auditPublisher.publish(
+            await this.bus.publish(
+                AUDIT_TRANSACTION_SUBJECT,
                 TransactionMessage.response(
                     TransactionMessage.InvocationPhase.Quotes,
                     TransactionMessage.InvocationGateway.Outbound,
@@ -212,7 +221,8 @@ export class PutAcceptPartyHandler
             const fspiopException = PutAcceptPartyHandler.toFspiopException(error, transferId);
 
             try {
-                await this.auditPublisher.publish(
+                await this.bus.publish(
+                    AUDIT_TRANSACTION_SUBJECT,
                     TransactionMessage.error(
                         TransactionMessage.InvocationPhase.Quotes,
                         TransactionMessage.InvocationGateway.Outbound,

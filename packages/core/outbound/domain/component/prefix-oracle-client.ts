@@ -4,8 +4,8 @@ import { Logger } from '@nestjs/common';
 import { AxiosInstance, isAxiosError } from 'axios';
 import { AxiosClientBuilder, AxiosClientBuilderParams } from '@shared/axios/component';
 import { FspiopErrors, FspiopException } from '@shared/fspiop';
+import { IRedisClient } from '@shared/redis';
 import { Dfsp } from '../dto';
-import { RedisClient } from './redis-client';
 
 export type PrefixOracleAxiosParams = AxiosClientBuilderParams;
 
@@ -21,7 +21,7 @@ export class PrefixOracleClient {
     constructor(
         prefixOracleEndpoint: string,
         params: PrefixOracleAxiosParams,
-        private readonly redisClient: RedisClient,
+        private readonly redisClient: IRedisClient,
         private readonly cacheTtlMs: number,
     ) {
         this.prefixOracleEndpoint = prefixOracleEndpoint.endsWith('/')

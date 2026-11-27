@@ -8,6 +8,8 @@ import { PartyIdType } from '@shared/fspiop';
 import {
     IMessageBus,
     MESSAGE_BUS,
+    IResponseSubscriber,
+    RESPONSE_SUBSCRIBER,
     MessagingModule,
     messagingOptionsSchema,
     FspiopMessagingSubjects,
@@ -84,6 +86,11 @@ describe('MessagingModule (ConfigurableModuleBuilder + Zod with Nats Provider)',
             // Verify that MESSAGE_BUS resolves cleanly
             const busFromToken = moduleRef.get<IMessageBus>(MESSAGE_BUS);
             assert.equal(busFromToken, consumer.bus);
+
+            // Verify that RESPONSE_SUBSCRIBER resolves cleanly
+            const subscriber = moduleRef.get<IResponseSubscriber>(RESPONSE_SUBSCRIBER);
+            assert.ok(subscriber != null);
+            assert.equal(typeof subscriber.waitFor, 'function');
         });
     });
 
@@ -104,6 +111,10 @@ describe('MessagingModule (ConfigurableModuleBuilder + Zod with Nats Provider)',
             assert.ok(consumer.bus != null);
             assert.equal(typeof consumer.bus.publish, 'function');
             assert.equal(typeof consumer.bus.subscribe, 'function');
+
+            const subscriber = moduleRef.get<IResponseSubscriber>(RESPONSE_SUBSCRIBER);
+            assert.ok(subscriber != null);
+            assert.equal(typeof subscriber.waitFor, 'function');
         });
     });
 
